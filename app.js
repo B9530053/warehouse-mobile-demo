@@ -19,35 +19,33 @@ const itemNames={uncounted:"未盤點",counted:"已盤點",exception:"待確認"
 const chip=(text,color="")=>`<span class="chip ${color}">${esc(text)}</span>`;
 const taskColor=s=>({active:"green",review:"orange",accounting:"blue",closed:"green"}[s]||"");
 const itemColor=s=>({counted:"green",approved:"blue",exception:"red",recount:"orange"}[s]||"");
-const heading=(k,title,sub)=>`<div class="heading"><div class="eyebrow">${esc(k)}</div><h1>${esc(title)}</h1><p>${esc(sub)}</p></div>`;
-const stat=(label,value,foot,warn=false)=>`<div class="card stat ${warn?"warn":""}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(foot)}</small></div>`;
+const heading=(k,title,sub)=>`<div class="heading"><h1>${esc(title)}</h1>${sub?`<p>${esc(sub)}</p>`:""}</div>`;
+const stat=(label,value,foot,warn=false)=>`<div class="card stat ${warn?"warn":""}"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
 function notice(text,type=""){return `<div class="notice ${type}"><div>${text}</div></div>`;}
 function button(label,action,cls="secondary",id=""){return `<button type="button" class="btn ${cls}" data-action="${action}" ${id?`data-id="${esc(id)}"`:""}>${esc(label)}</button>`;}
 function formatQty(v){if(v===null||v===undefined||v==="")return "—";return String(Math.round((Number(v)+Number.EPSILON)*1000)/1000);}
 function progress(){let t=state.task;if(!t)return {total:0,done:0,approved:0,missing:0};return {total:t.items.length,done:t.items.filter(i=>["counted","approved"].includes(i.state)).length,approved:t.items.filter(i=>i.state==="approved").length,missing:t.items.filter(i=>["uncounted","recount","exception"].includes(i.state)).length};}
 function shell(inner){
   let nav=(name,title,ico)=>`<button type="button" data-action="navigate" data-view="${name}" class="${ui.view===name?"active":""}">${icon(ico)}<span>${title}</span></button>`;
-  return `<div class="shell"><header class="top"><div><div class="eyebrow">WAREHOUSE WORKSPACE</div><div class="logo">庫房盤點</div></div><div class="mark">${icon("box")}</div></header><div class="banner">手機流程體驗 ・ 這不是正式庫存系統</div><main class="content">${inner}</main><nav class="bottom" aria-label="主要導覽">${nav("home","總覽","home")}${nav("tasks","盤點","list")}${nav("admin","管理","manage")}</nav></div>`;
+  return `<div class="shell"><header class="top"><div class="brand"><strong class="brand-name">SUSS</strong><span class="brand-divider"></span><span class="brand-title">庫房盤點系統</span></div><span class="test-badge">測試版</span></header><div class="banner">僅限範例資料・資料保存在本機</div><main class="content">${inner}</main><nav class="bottom" aria-label="主要導覽">${nav("home","總覽","home")}${nav("tasks","盤點","list")}${nav("admin","管理","manage")}</nav></div>`;
 }
 function home(){
   const p=progress(),missing=state.stock.filter(s=>!s.unit).length;
-  return heading("OVERVIEW","工作總覽","查看目前的模擬狀態，從匯入到盤點一步步體驗。")+
-   `<div class="hero card"><div class="eyebrow tag">MOBILE INVENTORY DEMO</div><h2>讓每一次盤點<br>更簡單、更安心。</h2><p>先匯入範例，確認單位，再建立任務。完成後可以切換到盤點頁輸入數量。</p>${button(state.stock.length?"繼續處理":"從匯入開始","go-import","ghost")}</div>
-    <div class="stats">${stat("已匯入物料",state.stock.length,"依料號與儲位計算")}${stat("單位待補",missing,"建立任務前確認",missing>0)}${stat("已盤點",`${p.done} / ${p.total}`,"有效的盤點項目")}${stat("任務狀態",state.task?taskNames[state.task.status]:"尚未建立","在管理頁建立任務")}</div>
-    <div class="section"><h2>體驗流程</h2><small>從上到下</small></div><div class="card panel"><div class="list-note"><strong>01　匯入與預覽</strong><div class="tiny muted">公開測試版僅提供合成範例。</div></div><div class="list-note"><strong>02　確認單位並建立任務</strong><div class="tiny muted">單位未確認時不會讓任務開始。</div></div><div class="list-note"><strong>03　盤點、覆核與模擬結案</strong><div class="tiny muted">填入實盤數量，主管確認差異。</div></div></div>
-    ${notice("這是互動模擬：資料只保存在目前這個瀏覽器，並非多人同步或正式後台。請勿用它管理正式庫存。","warning")}`;
+  const task=state.task;
+  return heading("OVERVIEW","工作總覽","")+
+   `<div class="hero card"><div class="hero-label">盤點作業</div><h2>${task?esc(task.name):"尚無盤點任務"}</h2><p>${task?esc(taskNames[task.status]):"請至管理頁建立任務"}</p>${task?`<button type="button" class="btn ghost" data-action="navigate" data-view="tasks">查看盤點</button>`:button("前往管理","go-import","ghost")}</div>
+    <div class="section"><h2>作業概況</h2></div><div class="stats">${stat("物料數",state.stock.length,"")}${stat("單位待確認",missing,"",missing>0)}${stat("盤點進度",task?`${p.done} / ${p.total}`:"—","")}${stat("任務狀態",task?taskNames[task.status]:"未建立","")}</div>`;
 }
 function previewCounts(p){let keys=new Set(state.stock.map(s=>s.sku+"\u0000"+s.bin));return {add:p.entries.filter(e=>!keys.has(e.sku+"\u0000"+e.bin)).length,old:p.entries.filter(e=>keys.has(e.sku+"\u0000"+e.bin)).length};}
 function importView(){
   const p=ui.preview;
-  let html=`<div class="card panel"><h2>匯入 Excel</h2><p class="tiny muted">使用合成範例體驗匯入後的狀態。公開測試版不提供上傳 Excel。</p>
-   <div class="notice warning">公開測試版僅使用合成範例，請勿輸入公司真實資料。</div>
+  let html=`<div class="card panel"><h2>資料匯入</h2><p class="tiny muted">測試版僅提供範例資料，不支援上傳 Excel。</p>
    ${button("載入合成範例","sample","secondary full")}</div>`;
   if(ui.loading)html+=notice("正在這台裝置讀取 Excel，請稍候。","");
   if(!p)return html;
   const c=previewCounts(p);
   html+=`<div class="section"><h2>匯入預覽</h2><small>${esc(p.sheet)}</small></div><div class="summary"><div><small>有效列</small><strong>${p.entries.length}</strong></div><div><small>新增</small><strong>${c.add}</strong></div><div><small>既有資料</small><strong>${c.old}</strong></div><div><small>錯誤</small><strong>${p.errors.length}</strong></div></div>
-   ${notice(`來源：${esc(p.source)}。採用「帳面數量」；文中數量和歷史實盤不會自動變成新盤點結果。`,"warning")}
+   ${notice(`來源：${esc(p.source)} · 數量採用帳面數量`,"warning")}
    ${p.errors.length?notice(`<strong>需要修正</strong><br>${p.errors.slice(0,15).map(esc).join("<br>")}${p.errors.length>15?`<br>還有 ${p.errors.length-15} 項錯誤`:""}`,"error"):""}
    ${p.warnings.length?notice(`<strong>請留意</strong><br>${p.warnings.map(esc).join("<br>")}`,"warning"):""}
    <div class="card panel"><div class="row"><h2>資料明細</h2><span class="tiny muted">最多顯示前 20 筆</span></div>${p.entries.slice(0,20).map(e=>`<div class="list-note"><div class="row"><strong>${esc(e.sku)}</strong>${chip(state.stock.some(s=>s.sku===e.sku&&s.bin===e.bin)?"既有／待對帳":"新增","green")}</div><div class="tiny muted">${esc(e.bin)} · 帳面 ${esc(formatQty(e.qty))} · 文中 ${esc(e.reference||"—")}</div></div>`).join("")||'<div class="empty">沒有可匯入的資料</div>'}</div>
@@ -56,14 +54,14 @@ function importView(){
 }
 function stockView(){
   let missing=state.stock.filter(s=>!s.unit).length, term=ui.filter.toLowerCase(),rows=state.stock.filter(s=>[s.sku,s.bin,s.name].some(v=>String(v||"").toLowerCase().includes(term)));
-  return `<div class="card panel"><div class="row"><h2>物料主檔</h2>${chip(`單位待補 ${missing}`,missing?"orange":"green")}</div><p class="tiny muted">新增資料不會自動推測單位。請先核對，再替所選範圍設定。</p>
+  return `<div class="card panel"><div class="row"><h2>物料主檔</h2>${chip(`單位待補 ${missing}`,missing?"orange":"green")}</div><p class="tiny muted">請確認新增物料的單位。</p>
   <form id="unit-form"><div class="field"><label for="unit-prefix">料號前綴（留白表示全部待補）</label><input class="input" id="unit-prefix" name="prefix" placeholder="例如 DEMO-1"></div><div class="field"><label for="unit-choice">確認後使用的單位</label><select id="unit-choice" name="unit" required><option value="">請選擇</option><option value="件">件</option><option value="個">個</option><option value="箱">箱</option><option value="米">米</option><option value="公斤">公斤</option></select></div><div class="field"><label><input type="checkbox" name="confirmed" required>我已核對所選料號的單位</label></div><button class="btn secondary full" type="submit" ${!missing?"disabled":""}>為待補資料設定單位</button></form></div>
   <form id="search-form" class="field"><label for="stock-search">搜尋物料</label><div class="actions"><input class="input" id="stock-search" name="term" value="${esc(ui.filter)}" placeholder="料號或儲位"><button class="btn secondary" type="submit">搜尋</button></div></form>
   <div class="section"><h2>物料清單</h2><small>${rows.length} 筆，顯示前 30 筆</small></div><div class="stack">${rows.slice(0,30).map(s=>`<div class="card item"><div class="item-main"><strong>${esc(s.bin)} · ${esc(s.sku)}</strong><small>${esc(s.name)} · 帳面 ${esc(formatQty(s.qty))} ${esc(s.unit||"單位待補")}</small></div>${chip(s.unit?"已確認":"單位待補",s.unit?"green":"orange")}</div>`).join("")||'<div class="card empty">目前沒有符合的物料，請先匯入或調整搜尋。</div>'}</div>`;
 }
 function taskAdmin(){
   const t=state.task,p=progress();
-  if(!t)return `<div class="card panel"><h2>建立盤點任務</h2><p class="tiny muted">一個示範任務會納入符合儲位前綴的物料。清單內若有單位未確認，會先阻擋。</p><form id="task-create"><div class="field"><label for="task-name">任務名稱</label><input id="task-name" class="input" name="name" required placeholder="例如 A 區例行盤點"></div><div class="field"><label for="task-bin">儲位前綴（留白代表全部）</label><input id="task-bin" class="input" name="prefix" placeholder="例如 A-"></div>${notice("這是簡化的單區任務體驗；正式版另有多範圍設定。") }<button type="submit" class="btn primary full">建立盤點任務</button></form></div>`;
+  if(!t)return `<div class="card panel"><h2>建立盤點任務</h2><p class="tiny muted">建立任務前，請確認物料單位。</p><form id="task-create"><div class="field"><label for="task-name">任務名稱</label><input id="task-name" class="input" name="name" required placeholder="例如 A 區例行盤點"></div><div class="field"><label for="task-bin">儲位前綴（留白代表全部）</label><input id="task-bin" class="input" name="prefix" placeholder="例如 A-"></div><button type="submit" class="btn primary full">建立盤點任務</button></form></div>`;
   let list=t.items.map((i,idx)=>{
     const diff=i.actual===null?null:Math.round((i.actual-i.book)*1000)/1000;
     let actions="";
@@ -71,21 +69,21 @@ function taskAdmin(){
     if(t.status==="active"&&i.state==="exception")actions=button("要求覆盤","recount","secondary",String(idx));
     return `<div class="card panel"><div class="row"><strong>${esc(i.bin)} · ${esc(i.sku)}</strong>${chip(itemNames[i.state],itemColor(i.state))}</div><p class="tiny muted">帳面 ${esc(formatQty(i.book))} ${esc(i.unit)} · 實盤 ${esc(formatQty(i.actual))} ${esc(i.unit)}${diff===null?"":` · 差異 ${esc(formatQty(diff))}`}</p>${actions}</div>`;
   }).join("");
-  return `<div class="card panel"><div class="row"><h2>${esc(t.name)}</h2>${chip(taskNames[t.status],taskColor(t.status))}</div><p class="tiny muted">已盤 ${p.done} / ${p.total} · 已核准 ${p.approved} / ${p.total}</p>${notice("本頁僅模擬狀態與數量變化；沒有真實權限控管或外部帳務。","warning")}</div>
+  return `<div class="card panel"><div class="row"><h2>${esc(t.name)}</h2>${chip(taskNames[t.status],taskColor(t.status))}</div><p class="tiny muted">已盤 ${p.done} / ${p.total} · 已核准 ${p.approved} / ${p.total}</p></div>
   <div class="section"><h2>任務明細與覆核</h2><small>${p.total} 筆</small></div><div class="stack">${list}</div>
   ${t.status==="accounting"?`<form id="fake-accounting" class="card panel" style="margin-top:12px"><h2>模擬帳務確認</h2><p class="tiny muted">這不會寫入 ERP。此處僅用來體驗最後的狀態。</p><div class="field"><label for="fake-ref">模擬單據編號</label><input id="fake-ref" class="input" name="reference" placeholder="例如 DEMO-001" required></div><button class="btn primary full" type="submit">記錄模擬處理並結案</button></form>`:""}
   ${t.status==="closed"?notice(`模擬已結案 · ${esc(t.reference||"無單據")}`)+button("建立下一個任務","archive-task","secondary full"):""}`;
 }
 function admin(){
   const tabs=[["import","Excel 匯入"],["stock","物料主檔"],["task","任務與覆核"]];
-  return heading("MANAGEMENT","管理後台","匯入、維護單位、建立任務及覆核。")+
+  return heading("MANAGEMENT","管理後台","")+
    `<div class="tabbar">${tabs.map(([id,label])=>`<button type="button" data-action="admin-tab" data-id="${id}" class="${ui.adminTab===id?"active":""}">${label}</button>`).join("")}</div>`+
    (ui.adminTab==="import"?importView():ui.adminTab==="stock"?stockView():taskAdmin());
 }
 function taskList(){
  const t=state.task,p=progress();if(!t)return heading("MY TASKS","我的盤點任務","先請管理者匯入資料並建立任務。")+`<div class="card empty">尚未建立盤點任務</div>${button("前往管理後台","go-import","primary full")}`;
  return heading("INVENTORY TASK",t.name,`${p.done} / ${p.total} 項已盤點 · ${taskNames[t.status]}`)+
-  `${notice("請逐筆確認儲位與料號。輸入 0 代表確認沒有庫存；找不到請使用異常回報。")}
+  `${notice("輸入 0 表示無庫存；找不到請回報異常。")}
   <div class="section"><h2>儲位與物料</h2><small>${p.total} 項</small></div><div class="stack">${t.items.map((i,idx)=>`<div class="card item"><div class="item-main"><strong>${esc(i.bin)}</strong><small>${esc(i.sku)} · 目前帳面 ${esc(formatQty(i.book))} ${esc(i.unit)}</small>${i.actual!==null?`<small>實盤 ${esc(formatQty(i.actual))} ${esc(i.unit)}</small>`:""}</div><div class="item-side">${chip(itemNames[i.state],itemColor(i.state))}${t.status==="active"&&!['approved','exception'].includes(i.state)?`<button type="button" class="btn secondary" data-action="count-item" data-id="${idx}" aria-label="盤點 ${esc(i.sku)}">盤點</button>`:""}</div></div>`).join("")}</div>
   ${t.status==="active"?`<div style="margin-top:14px">${button("完成盤點，送交覆核","submit-task","primary full")}</div>`:""}`;
 }
