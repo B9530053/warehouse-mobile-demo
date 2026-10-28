@@ -33,7 +33,7 @@ function home(){
   const p=progress(),missing=state.stock.filter(s=>!s.unit).length;
   const task=state.task;
   return heading("OVERVIEW","工作總覽","")+
-   `<div class="hero card"><div class="hero-label">盤點作業</div><h2>${task?esc(task.name):"尚無盤點任務"}</h2><p>${task?esc(taskNames[task.status]):"請至管理頁建立任務"}</p>${task?`<button type="button" class="btn ghost" data-action="navigate" data-view="tasks">查看盤點</button>`:button("前往管理","go-import","ghost")}</div>
+   `<div class="hero card"><div class="hero-label">盤點作業</div><h2>${task?esc(task.name):"尚無盤點資料"}</h2><p>${task?esc(taskNames[task.status]):"匯入資料後開始盤點"}</p>${task?`<button type="button" class="btn ghost" data-action="navigate" data-view="tasks">查看盤點</button>`:button("前往管理","go-import","ghost")}</div>
     <div class="section"><h2>作業概況</h2></div><div class="stats">${stat("物料數",state.stock.length,"")}${stat("單位待確認",missing,"",missing>0)}${stat("盤點進度",task?`${p.done} / ${p.total}`:"—","")}${stat("任務狀態",task?taskNames[task.status]:"未建立","")}</div>`;
 }
 function previewCounts(p){let keys=new Set(state.stock.map(s=>s.sku+"\u0000"+s.bin));return {add:p.entries.filter(e=>!keys.has(e.sku+"\u0000"+e.bin)).length,old:p.entries.filter(e=>keys.has(e.sku+"\u0000"+e.bin)).length};}
@@ -43,12 +43,17 @@ function importView(){
   if(ui.loading)html+=notice("正在這台裝置讀取 Excel，請稍候。","");
   if(!p)return html;
   const c=previewCounts(p);
-  html+=`<div class="section"><h2>匯入預覽</h2><small>${esc(p.sheet)}</small></div><div class="summary"><div><small>有效列</small><strong>${p.entries.length}</strong></div><div><small>新增</small><strong>${c.add}</strong></div><div><small>既有資料</small><strong>${c.old}</strong></div><div><small>錯誤</small><strong>${p.errors.length}</strong></div></div>
+  const stockByKey=new Map(state.stock.map(s=>[s.sku+"\u0000"+s.bin,s]));
+  const conflicts=p.entries.filter(e=>{const old=stockByKey.get(e.sku+"\u0000"+e.bin);return e.unit&&old?.unit&&e.unit!==old.unit;});
+  const noUnit=p.entries.filter(e=>!e.unit&&!stockByKey.get(e.sku+"\u0000"+e.bin)?.unit).length;
+  html+=`<div class="section"><h2>匯入預覽</h2><small>${esc(p.sheet)}</small></div><div class="summary"><div><small>有效列</small><strong>${p.entries.length}</strong></div><div><small>新增</small><strong>${c.add}</strong></div><div><small>既有資料</small><strong>${c.old}</strong></div><div><small>錯誤</small><strong>${p.errors.length+conflicts.length}</strong></div></div>
    ${notice(`來源：${esc(p.source)} · 採用帳面數量`)}
    ${p.errors.length?notice(`<strong>需要修正</strong><br>${p.errors.slice(0,15).map(esc).join("<br>")}${p.errors.length>15?`<br>還有 ${p.errors.length-15} 項錯誤`:""}`,"error"):""}
+   ${conflicts.length?notice(`${conflicts.length} 筆物料的 Excel 單位與主檔不同，請先核對。`,"error"):""}
+   ${noUnit?notice(`${noUnit} 筆單位未提供，盤點時會顯示未提供。`,"warning"):""}
    ${p.warnings.length?notice(`<strong>請留意</strong><br>${p.warnings.map(esc).join("<br>")}`,"warning"):""}
-   <div class="card panel"><div class="row"><h2>資料明細</h2><span class="tiny muted">最多顯示前 20 筆</span></div>${p.entries.slice(0,20).map(e=>`<div class="list-note"><div class="row"><strong>${esc(e.sku)}</strong>${chip(state.stock.some(s=>s.sku===e.sku&&s.bin===e.bin)?"既有／待對帳":"新增","green")}</div><div class="tiny muted">${esc(e.bin)} · 帳面 ${esc(formatQty(e.qty))} · 文中 ${esc(e.reference||"—")}</div></div>`).join("")||'<div class="empty">沒有可匯入的資料</div>'}</div>
-   <form id="import-apply" class="card panel" style="margin-top:12px"><div class="field"><label for="source-time">帳面來源時間（必填）</label><input id="source-time" class="input" type="datetime-local" name="source_time" required></div><div class="field"><label><input type="checkbox" name="confirmed" required>已確認匯入資料</label></div>${state.task&&state.task.status!=="closed"?notice("請先完成目前任務，再套用匯入。","warning"):""}<button class="btn primary full" type="submit" ${p.errors.length||!p.entries.length||state.task&&state.task.status!=="closed"?"disabled":""}>確認並套用</button><p class="tiny muted">新增物料須確認單位；既有帳面不會覆蓋。</p></form>`;
+   <div class="card panel"><div class="row"><h2>資料明細</h2><span class="tiny muted">最多顯示前 20 筆</span></div>${p.entries.slice(0,20).map(e=>`<div class="list-note"><div class="row"><strong>${esc(e.sku)}</strong>${chip(stockByKey.has(e.sku+"\u0000"+e.bin)?"既有／待對帳":"新增","green")}</div><div class="tiny muted">${esc(e.bin)} · 帳面 ${esc(formatQty(e.qty))} · 單位 ${esc(e.unit||"未提供")} · 文中 ${esc(e.reference||"—")}</div></div>`).join("")||'<div class="empty">沒有可匯入的資料</div>'}</div>
+   <form id="import-apply" class="card panel" style="margin-top:12px"><div class="field"><label for="source-time">帳面來源時間（必填）</label><input id="source-time" class="input" type="datetime-local" name="source_time" required></div><div class="field"><label><input type="checkbox" name="confirmed" required>已確認匯入資料</label></div>${state.task&&state.task.status!=="closed"?notice("請先完成目前盤點，再匯入。","warning"):""}<button class="btn primary full" type="submit" ${p.errors.length||conflicts.length||!p.entries.length||state.task&&state.task.status!=="closed"?"disabled":""}>確認並開始盤點</button><p class="tiny muted">盤點清單採用本次 Excel 帳面數量；既有主檔不會覆蓋。</p></form>`;
   return html;
 }
 function stockView(){
@@ -60,18 +65,18 @@ function stockView(){
 }
 function taskAdmin(){
   const t=state.task,p=progress();
-  if(!t)return `<div class="card panel"><h2>建立盤點任務</h2><form id="task-create"><div class="field"><label for="task-name">任務名稱</label><input id="task-name" class="input" name="name" required placeholder="例如 A 區例行盤點"></div><div class="field"><label for="task-bin">儲位前綴（留白代表全部）</label><input id="task-bin" class="input" name="prefix" placeholder="例如 A-"></div><button type="submit" class="btn primary full">建立盤點任務</button></form></div>`;
+  if(!t)return `<div class="card empty">尚無盤點清單</div>${button("匯入資料","go-import","primary full")}`;
   let list=t.items.map((i,idx)=>{
     const diff=i.actual===null?null:Math.round((i.actual-i.book)*1000)/1000;
     let actions="";
     if(t.status==="review"&&i.state==="counted")actions=`<div class="field"><label for="reason-${idx}">差異／覆盤原因${diff?"（差異必填）":"（選填）"}</label><input class="input" id="reason-${idx}" placeholder="輸入原因"></div><div class="actions">${button("要求覆盤","recount","secondary",String(idx))}${button("核准此筆","approve","primary",String(idx))}</div>`;
     if(t.status==="active"&&i.state==="exception")actions=button("要求覆盤","recount","secondary",String(idx));
-    return `<div class="card panel"><div class="row"><strong>${esc(i.bin)} · ${esc(i.sku)}</strong>${chip(itemNames[i.state],itemColor(i.state))}</div><p class="tiny muted">帳面 ${esc(formatQty(i.book))} ${esc(i.unit)} · 實盤 ${esc(formatQty(i.actual))} ${esc(i.unit)}${diff===null?"":` · 差異 ${esc(formatQty(diff))}`}</p>${actions}</div>`;
+    return `<div class="card panel"><div class="row"><strong>${esc(i.bin)} · ${esc(i.sku)}</strong>${chip(itemNames[i.state],itemColor(i.state))}</div><p class="tiny muted">帳面 ${esc(formatQty(i.book))} ${esc(i.unit||"（單位未提供）")} · 實盤 ${esc(formatQty(i.actual))} ${esc(i.unit||"")}${diff===null?"":` · 差異 ${esc(formatQty(diff))}`}</p>${actions}</div>`;
   }).join("");
   return `<div class="card panel"><div class="row"><h2>${esc(t.name)}</h2>${chip(taskNames[t.status],taskColor(t.status))}</div><p class="tiny muted">已盤 ${p.done} / ${p.total} · 已核准 ${p.approved} / ${p.total}</p></div>
   <div class="section"><h2>任務明細與覆核</h2><small>${p.total} 筆</small></div><div class="stack">${list}</div>
   ${t.status==="accounting"?`<form id="fake-accounting" class="card panel" style="margin-top:12px"><h2>模擬帳務確認</h2><p class="tiny muted">不會寫入 ERP。</p><div class="field"><label for="fake-ref">模擬單據編號</label><input id="fake-ref" class="input" name="reference" placeholder="例如 DEMO-001" required></div><button class="btn primary full" type="submit">記錄並結案</button></form>`:""}
-  ${t.status==="closed"?notice(`模擬已結案 · ${esc(t.reference||"無單據")}`)+button("建立下一個任務","archive-task","secondary full"):""}`;
+  ${t.status==="closed"?notice(`模擬已結案 · ${esc(t.reference||"無單據")}`)+button("匯入下一次盤點","go-import","secondary full"):""}`;
 }
 function admin(){
   const tabs=[["import","Excel 匯入"],["stock","物料主檔"],["task","任務與覆核"]];
@@ -80,24 +85,25 @@ function admin(){
    (ui.adminTab==="import"?importView():ui.adminTab==="stock"?stockView():taskAdmin());
 }
 function taskList(){
- const t=state.task,p=progress();if(!t)return heading("MY TASKS","盤點任務","")+`<div class="card empty">尚未建立盤點任務</div>${button("前往管理後台","go-import","primary full")}`;
+ const t=state.task,p=progress();if(!t)return heading("MY TASKS","盤點清單","")+`<div class="card empty">尚未匯入盤點資料</div>${button("前往管理後台","go-import","primary full")}`;
+ const missing=t.items.filter(i=>!i.unit).length;
  return heading("INVENTORY TASK",t.name,`${p.done} / ${p.total} 項已盤點 · ${taskNames[t.status]}`)+
-  `<div class="section"><h2>儲位與物料</h2><small>${p.total} 項</small></div><div class="stack">${t.items.map((i,idx)=>`<div class="card item"><div class="item-main"><strong>${esc(i.bin)}</strong><small>${esc(i.sku)} · 目前帳面 ${esc(formatQty(i.book))} ${esc(i.unit)}</small>${i.actual!==null?`<small>實盤 ${esc(formatQty(i.actual))} ${esc(i.unit)}</small>`:""}</div><div class="item-side">${chip(itemNames[i.state],itemColor(i.state))}${t.status==="active"&&!['approved','exception'].includes(i.state)?`<button type="button" class="btn secondary" data-action="count-item" data-id="${idx}" aria-label="盤點 ${esc(i.sku)}">盤點</button>`:""}</div></div>`).join("")}</div>
+  `${missing?notice(`${missing} 筆單位未提供。`,"warning"):""}<div class="section"><h2>儲位與物料</h2><small>${p.total} 項</small></div><div class="stack">${t.items.map((i,idx)=>`<div class="card item"><div class="item-main"><strong>${esc(i.bin)}</strong><small>${esc(i.sku)} · 帳面 ${esc(formatQty(i.book))} ${esc(i.unit||"（單位未提供）")}</small>${i.actual!==null?`<small>實盤 ${esc(formatQty(i.actual))} ${esc(i.unit||"")}</small>`:""}</div><div class="item-side">${chip(itemNames[i.state],itemColor(i.state))}${t.status==="active"&&!['approved','exception'].includes(i.state)?`<button type="button" class="btn secondary" data-action="count-item" data-id="${idx}" aria-label="盤點 ${esc(i.sku)}">盤點</button>`:""}</div></div>`).join("")}</div>
   ${t.status==="active"?`<div style="margin-top:14px">${button("完成盤點，送交覆核","submit-task","primary full")}</div>`:""}`;
 }
 function countView(){
  const i=state.task?.items[ui.itemId];if(!i)return taskList();
  return `<button class="back" type="button" data-action="back-list">← 返回儲位清單</button>`+heading("COUNT ITEM","開始盤點","")+
   `<div class="card panel"><div class="info-line"><div class="info-icon">${icon("box")}</div><div><strong>${esc(i.bin)}</strong><div class="tiny muted">${esc(i.sku)} · ${esc(i.name)}</div></div></div>
-  <hr class="divider"><div class="row"><span class="tiny muted">清點時帳面</span><strong>${esc(formatQty(i.book))} ${esc(i.unit)}</strong></div><form id="count-form"><div class="field quantity"><label for="actual">實際盤點數量</label><input id="actual" class="input" name="actual" inputmode="decimal" type="number" min="0" step="0.001" placeholder="請輸入" required><small>${esc(i.unit)} · 0 表示無庫存</small></div>
+  <hr class="divider"><div class="row"><span class="tiny muted">清點時帳面</span><strong>${esc(formatQty(i.book))} ${esc(i.unit||"（單位未提供）")}</strong></div><form id="count-form"><div class="field quantity"><label for="actual">實際盤點數量</label><input id="actual" class="input" name="actual" inputmode="decimal" type="number" min="0" step="0.001" placeholder="請輸入" required><small>${esc(i.unit||"單位未提供")} · 0 表示無庫存</small></div>
   <div class="actions">${button("回報找不到","exception","secondary")}<button class="btn primary" type="submit">儲存並下一筆</button></div></form></div>`;
 }
 function render(){app.innerHTML=shell(ui.view==="home"?home():ui.view==="admin"?admin():ui.view==="count"?countView():taskList());}
 const sampleEntries=[
- {sku:"DEMO-1001",bin:"A-01-01",name:"合成軸承",qty:12,reference:"12",sourceRow:2},
- {sku:"DEMO-1002",bin:"A-01-02",name:"合成接頭",qty:6,reference:"7",sourceRow:3},
- {sku:"DEMO-1003",bin:"A-02-01",name:"合成固定件",qty:0,reference:"0",sourceRow:4},
- {sku:"DEMO-1004",bin:"B-01-01",name:"合成墊片",qty:20,reference:"20",sourceRow:5}
+ {sku:"DEMO-1001",bin:"A-01-01",name:"合成軸承",qty:12,unit:"件",reference:"12",sourceRow:2},
+ {sku:"DEMO-1002",bin:"A-01-02",name:"合成接頭",qty:6,unit:"件",reference:"7",sourceRow:3},
+ {sku:"DEMO-1003",bin:"A-02-01",name:"合成固定件",qty:0,unit:"件",reference:"0",sourceRow:4},
+ {sku:"DEMO-1004",bin:"B-01-01",name:"合成墊片",qty:20,unit:"件",reference:"20",sourceRow:5}
 ];
 function previewSample(){ui.preview={entries:sampleEntries.map(x=>({...x})),errors:[],warnings:[],sheet:"範例資料",source:"範例資料"};ui.adminTab="import";ui.view="admin";render();toast("已載入範例");}
 function go(view){ui.view=view;ui.itemId=null;render();window.scrollTo(0,0);}
@@ -148,14 +154,27 @@ document.addEventListener("submit",event=>{
   if(form.id==="import-apply"){
     const p=ui.preview;if(!p||p.errors.length||!values.get("confirmed")||!values.get("source_time")){toast("請確認資料、來源時間及提示。",true);return;}
     if(state.task&&state.task.status!=="closed"){toast("請先完成目前任務，再套用新匯入。",true);return;}
-    const before=state.stock.length;
-    if(update(s=>{const keys=new Set(s.stock.map(x=>x.sku+"\u0000"+x.bin));for(const e of p.entries){let key=e.sku+"\u0000"+e.bin;if(!keys.has(key)){s.stock.push({...e,unit:""});keys.add(key);}}s.imports.push({source_time:String(values.get("source_time")),total:p.entries.length,source:p.source});})){let added=state.stock.length-before;ui.preview=null;ui.adminTab="stock";render();toast(`已套用：新增 ${added} 筆${added?"，請確認單位":""}`);}return;
+    const stockByKey=new Map(state.stock.map(s=>[s.sku+"\u0000"+s.bin,s]));
+    const conflicts=p.entries.some(e=>{const old=stockByKey.get(e.sku+"\u0000"+e.bin);return e.unit&&old?.unit&&e.unit!==old.unit;});
+    if(!p.entries.length||conflicts){toast("匯入資料無效或單位與主檔不同，請核對。",true);return;}
+    if(update(s=>{
+      if(s.task?.status==="closed"){s.history=s.history||[];s.history.push(s.task);}
+      const byKey=new Map(s.stock.map(x=>[x.sku+"\u0000"+x.bin,x]));
+      const items=p.entries.map(e=>{
+        const key=e.sku+"\u0000"+e.bin;let old=byKey.get(key);
+        if(!old){old={...e,unit:e.unit||""};s.stock.push(old);byKey.set(key,old);}
+        else if(!old.unit&&e.unit)old.unit=e.unit;
+        return {sku:e.sku,bin:e.bin,name:e.name,unit:e.unit||old.unit||"",book:e.qty,actual:null,state:"uncounted",sourceRow:e.sourceRow};
+      });
+      s.imports.push({source_time:String(values.get("source_time")),total:p.entries.length,source:p.source});
+      s.task={name:"本次盤點",prefix:"",status:"active",source_time:String(values.get("source_time")),items};
+    })){ui.preview=null;go("tasks");toast("已匯入，請開始盤點");}return;
   }
   if(form.id==="unit-form"){
     const unit=String(values.get("unit")||""),prefix=String(values.get("prefix")||"").trim();
     if(!unit||!values.get("confirmed")){toast("請選擇並確認單位。",true);return;}
     const n=state.stock.filter(s=>!s.unit&&s.sku.startsWith(prefix)).length;if(!n){toast("沒有符合範圍的待補資料。",true);return;}
-    if(update(s=>s.stock.forEach(x=>{if(!x.unit&&x.sku.startsWith(prefix))x.unit=unit;}))){render();toast(`已為 ${n} 筆測試資料設定單位`);}return;
+    if(update(s=>{s.stock.forEach(x=>{if(!x.unit&&x.sku.startsWith(prefix))x.unit=unit;});s.task?.items.forEach(i=>{if(!i.unit&&["uncounted","recount"].includes(i.state)&&i.sku.startsWith(prefix))i.unit=unit;});})){render();toast(`已為 ${n} 筆測試資料設定單位`);}return;
   }
   if(form.id==="search-form"){ui.filter=String(values.get("term")||"").trim();render();return;}
   if(form.id==="task-create"){

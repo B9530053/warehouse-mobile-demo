@@ -77,7 +77,7 @@ async function readExcelOnDevice(file){
   const source=xml(await read(sheetTarget(relationships.get(detail.id))));
   const rows=parseRows(source),header=rows.find(r=>r.row===1)||rows[0];
   if(!header)throw new Error("工作表沒有標題。");
-  const aliases={sku:["料號","物料編號","物料號碼","sku"],bin:["儲位編碼bin","儲位編碼","儲位","位置","bin"],book:["帳面數量qty","帳面數量","庫存數量","qty"],reference:["文中數量","參考數量"],name:["品名","物料名稱","名稱"]};
+  const aliases={sku:["料號","物料編號","物料號碼","sku"],bin:["儲位編碼bin","儲位編碼","儲位","位置","bin"],book:["帳面數量qty","帳面數量","庫存數量","qty"],reference:["文中數量","參考數量"],name:["品名","物料名稱","名稱"],unit:["單位","計量單位","庫存單位","unit","uom"]};
   const columns={};
   for(const [key,names] of Object.entries(aliases))for(const [n,v] of Object.entries(header.values))if(names.includes(normalize(v.text))&&!columns[key])columns[key]=Number(n);
   if(!columns.sku||!columns.bin||!columns.book)throw new Error("示範站需要首列含料號、儲位與帳面數量；其他格式請使用正式系統的欄位對應功能。");
@@ -88,10 +88,11 @@ async function readExcelOnDevice(file){
     if(!sku&&!bin&&!raw)continue;
     if(!sku||!bin||!raw){errors.push(`第 ${row.row} 列：料號、儲位或帳面數量空白。`);continue;}
     if([get("sku"),get("bin"),get("book")].some(c=>c.error||c.missingCache)){errors.push(`第 ${row.row} 列：必要欄位為 Excel 錯誤或公式沒有快取值。`);continue;}
+    if(get("unit").error||get("unit").missingCache){errors.push(`第 ${row.row} 列：單位欄位有錯誤或公式沒有快取值。`);continue;}
     if(!/^\d+(\.\d{1,3})?$/.test(raw)||!Number.isFinite(Number(raw))||Number(raw)>1000000000){errors.push(`第 ${row.row} 列：帳面數量無法辨識。`);continue;}
     const key=sku+"\u0000"+bin;if(seen.has(key)){errors.push(`第 ${row.row} 列：料號與儲位重複。`);continue;}seen.add(key);
     if([get("sku"),get("bin"),get("book")].some(c=>c.formula))requiredFormula++;
-    entries.push({sku,bin,name:get("name").text||"未提供品名",qty:Number(raw),reference:get("reference").text,sourceRow:row.row});
+    entries.push({sku,bin,name:get("name").text||"未提供品名",qty:Number(raw),reference:get("reference").text,unit:get("unit").text.trim(),sourceRow:row.row});
     if(!skuBins.has(sku))skuBins.set(sku,new Set());skuBins.get(sku).add(bin);
   }
   if(requiredFormula)warnings.push(`${requiredFormula} 筆必要欄位含公式，只讀取儲存的快取值。`);
