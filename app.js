@@ -39,7 +39,7 @@ function home(){
 function previewCounts(p){let keys=new Set(state.stock.map(s=>s.sku+"\u0000"+s.bin));return {add:p.entries.filter(e=>!keys.has(e.sku+"\u0000"+e.bin)).length,old:p.entries.filter(e=>keys.has(e.sku+"\u0000"+e.bin)).length};}
 function importView(){
   const p=ui.preview;
-  let html=`<div class="card panel"><h2>資料匯入</h2><div class="field"><label for="excel-file">選擇 Excel（.xlsx）</label><input id="excel-file" class="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div><p class="tiny muted">限範例資料；檔案僅在本機讀取。</p><div class="actions"><a class="btn secondary" href="./warehouse-demo-sample.xlsx" download>下載範例</a>${button("載入範例","sample","secondary")}</div></div>`;
+  let html=`<div class="card panel"><h2>資料匯入</h2><div class="field"><label for="excel-file">選擇 Excel（.xlsx）</label><input id="excel-file" class="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></div><p class="tiny muted">限範例資料；檔案僅在本機讀取。</p><div class="actions"><a class="btn secondary" href="./warehouse-demo-sample.xlsx?v=20261028-4" download>下載範例</a>${button("載入範例","sample","secondary")}</div></div>`;
   if(ui.loading)html+=notice("正在這台裝置讀取 Excel，請稍候。","");
   if(!p)return html;
   const c=previewCounts(p);
